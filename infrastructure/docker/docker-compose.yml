@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  # 1. PostgreSQL Database
+  db:
+    image: postgres:16-alpine
+    container_name: jeevansetu-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-jeevansetu}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-jeevansetu_secure_pwd_2026}
+      POSTGRES_DB: ${POSTGRES_DB:-jeevansetu_db}
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-jeevansetu} -d ${POSTGRES_DB:-jeevansetu_db}']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # 2. Next.js 15 Web Application & REST API
+  web:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/Dockerfile
+    container_name: jeevansetu-web
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - '3000:3000'
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-jeevansetu}:${POSTGRES_PASSWORD:-jeevansetu_secure_pwd_2026}@db:5432/${POSTGRES_DB:-jeevansetu_db}?schema=public
+      - JWT_SECRET=${JWT_SECRET:-jeevansetu_super_secure_jwt_secret_token_2026_sih}
+      - QR_SIGNING_KEY=${QR_SIGNING_KEY:-jeevansetu_qr_hmac_sha256_secret_key_demo_2026}
+      - AI_SERVICE_URL=http://ai-service:8001
+      - NEXT_PUBLIC_APP_NAME=JeevanSetu
+    volumes:
+      - uploads_data:/app/public/uploads
+
+  # 3. Python FastAPI AI & OCR Microservice
+  ai-service:
+    build:
+      context: ../../apps/ai-service
+      dockerfile: Dockerfile
+    container_name: jeevansetu-ai
+    restart: unless-stopped
+    ports:
+      - '8001:8001'
+    environment:
+      - ENVIRONMENT=production
+      - PORT=8001
+
+volumes:
+  postgres_data:
+  uploads_data:
